@@ -2,16 +2,19 @@ import gql from "graphql-tag"
 
 
 const typeDefs = gql`
-    type Product {
+    type User {
         id: ID!
-        title: String!
-        category: String!
-        price: Float!
-        inStock: Boolean!
+        firstName: String!
+        lastName: String!
+        email: String!
+        role: String!
+        businessName: String
+        isVerified: Boolean!
+        isActive: Boolean!
     }
 
-    type PaginatedProducts {
-        products: [Product!]!
+    type PaginatedUsers {
+        users: [User!]!
         pagination: PaginationInfo!
     }
 
@@ -25,15 +28,15 @@ const typeDefs = gql`
         prevPage: Int
     }
 
-    type ProductResponse {
+    type UserResponse {
         success: Boolean!
         message: String!
-        product: Product
+        user: User
     }
 
     type Query {
-        paginatedProducts(page: Int, limit: Int): PaginatedProducts!
-        product(id: ID!): ProductResponse
+        paginatedUsers(page: Int, limit: Int): PaginatedUsers!
+        user(id: ID!): UserResponse
     }
 `
 

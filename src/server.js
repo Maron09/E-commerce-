@@ -6,6 +6,8 @@ import { expressMiddleware } from "@apollo/server/express4"
 import typeDefs from "./graphql/schema.js"
 import resolvers from "./graphql/resolvers.js"
 import AuthRoutes from "./routes/Auth-Routes.js"
+import AuthMiddleware from "./middleware/auth-middleware.js"
+import UserRoutes from "./routes/User-Routes.js"
 
 
 
@@ -28,8 +30,11 @@ async function startApolloServer() {
         })
         await server.start()
 
-        app.use("/graphql", expressMiddleware(server))
+        app.use("/graphql", AuthMiddleware.VerifyToken, expressMiddleware(server, {
+            context: async ({req}) => ({req})
+        }))
         app.use("/api", AuthRoutes)
+        app.use("/api", AuthMiddleware.VerifyToken, UserRoutes)
 
         app.listen(PORT, () => {
             console.log(`🚀 Server is running on http://localhost:${PORT}`);
