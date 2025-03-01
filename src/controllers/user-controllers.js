@@ -3,15 +3,22 @@ import mongoose from "mongoose";
 
 
 class UserControllers {
-    static async UploadProfilePicture (req, res) {
+
+    static async UploadProfilePicture(req, res) {
         try {
-            const { userId } = req.params
+            if (!req.cloudinaryUrl) {
+                return res.status(400).json({
+                    success: false,
+                    message: "File upload failed"
+                })
+            }
+            const {userId} =  req.params
 
             if (!mongoose.Types.ObjectId.isValid(userId)) {
                 return res.status(400).json({
                     success: false,
                     message: "Invalid user ID"
-                });
+                })
             }
 
             if (req.userInfo.userID !== userId) {
@@ -21,36 +28,22 @@ class UserControllers {
                 });
             }
 
-            if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    message: "No file Uploaded"
-                })
-            }
-
             const profile = await userProfile.findOneAndUpdate(
                 {user: userId},
-                {profilePicture: req.file.path},
+                {profilePicture: req.cloudinaryUrl},
                 {new: true}
             )
-
-            if (!profile) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Profile not found"
-                })
-            }
             return res.status(200).json({
                 success: true,
-                message: "Profile Picture uploaded Successfully",
-                profile
+                message: "Profile picture uploaded successfully",
+                imageUrl: req.cloudinaryUrl
             })
         } catch(error) {
-            console.error(error)
+            console.log(error)
             res.status(500).json({
                 success: false,
-                message: "Error uploading profile picture",
-                error: error.message
+                error: "Server error",
+                details: error.message
             })
         }
     }
