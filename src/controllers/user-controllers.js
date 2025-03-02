@@ -36,7 +36,7 @@ class UserControllers {
             return res.status(200).json({
                 success: true,
                 message: "Profile picture uploaded successfully",
-                imageUrl: req.cloudinaryUrl
+                imageUrl: profile
             })
         } catch(error) {
             console.log(error)
