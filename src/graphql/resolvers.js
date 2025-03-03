@@ -4,6 +4,7 @@ import Category from "../models/Category.js"
 import Product from "../models/Product.js"
 import mongoose from "mongoose"
 import userProfile from "../models/UserProfile.js"
+import WishList from "../models/Wishlist.js"
 
 
 
@@ -554,6 +555,137 @@ const resolvers = {
                     success: false,
                     message: "Error deleting Product",
                 }
+            }
+        },
+        addToWishList: async (_, { productId }, { req }) => {
+            try {
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only customers can save products");
+                }
+                const customerId = req.userInfo.userID;
+        
+                if (!mongoose.Types.ObjectId.isValid(productId)) {
+                    throw new Error("Invalid product ID");
+                }
+        
+                const existingItem = await WishList.findOne({
+                    product: productId,
+                    customer: customerId,
+                });
+        
+                if (existingItem) {
+                    if (existingItem.isDeleted) {
+                    existingItem.isDeleted = false;
+                    await existingItem.save();
+                    return {
+                        success: true,
+                        message: "Wishlist item restored",
+                        item: {
+                        ...existingItem.toObject(),
+                        id: existingItem._id.toString(), // ✅ Convert `_id` to string
+                        product: {
+                            ...existingItem.product.toObject(),
+                            id: existingItem.product._id.toString(), // ✅ Convert product `_id` to string
+                        },
+                        },
+                    };
+                    }
+                    return {
+                    success: false,
+                    message: "Item already in wishlist",
+                    item: null,
+                    };
+                }
+        
+                const newWishlistItem = await WishList.create({
+                    product: productId,
+                    customer: customerId,
+                });
+        
+                // Fetch the newly created item and populate it
+                const populatedWishlistItem = await WishList.findById(newWishlistItem._id)
+                    .populate("product")
+                    .lean();
+        
+                return {
+                    success: true,
+                    message: "Item added to wishlist",
+                    item: {
+                    ...populatedWishlistItem,
+                    id: populatedWishlistItem._id.toString(), // ✅ Ensure `id` is a string
+                    product: {
+                        ...populatedWishlistItem.product,
+                        id: populatedWishlistItem.product._id.toString(), // ✅ Convert `product.id` to string
+                    },
+                    },
+                };
+                } catch (error) {
+                console.error(error);
+                return {
+                    success: false,
+                    message: error.message,
+                    item: null,
+                };
+                }
+        },
+        removeFromWishList: async (_, { productId }, { req }) => {
+            try {
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only customers can remove products");
+                }
+            
+                const customerId = req.userInfo.userID;
+            
+                if (!mongoose.Types.ObjectId.isValid(productId)) {
+                    throw new Error("Invalid product ID");
+                }
+            
+                const wishlistItem = await WishList.findOne({
+                    product: productId,
+                    customer: customerId
+                }).populate({
+                    path: "product",
+                    populate: { path: "vendor" } // ✅ Ensure vendor is populated
+                }).populate("customer"); // ✅ Ensure customer is populated
+            
+                if (!wishlistItem) {
+                    return {
+                    success: false,
+                    message: "Item not found in wishlist",
+                    item: null
+                    };
+                }
+            
+                wishlistItem.isDeleted = true;
+                await wishlistItem.save();
+            
+                return {
+                    success: true,
+                    message: "Item removed from wishlist",
+                    item: {
+                    ...wishlistItem.toObject(),
+                    id: wishlistItem._id.toString(), // ✅ Convert _id to string
+                    product: {
+                        ...wishlistItem.product.toObject(),
+                        id: wishlistItem.product._id.toString(), // ✅ Convert product _id to string
+                        vendor: {
+                        ...wishlistItem.product.vendor.toObject(),
+                        id: wishlistItem.product.vendor._id.toString() // ✅ Convert vendor _id to string
+                        }
+                    },
+                    customer: {
+                        ...wishlistItem.customer.toObject(),
+                        id: wishlistItem.customer._id.toString() // ✅ Convert customer _id to string
+                    }
+                    }
+                };
+                } catch (error) {
+                console.error(error);
+                return {
+                    success: false,
+                    message: error.message,
+                    item: null
+                };
             }
         }
     }
