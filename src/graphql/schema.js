@@ -101,19 +101,40 @@ const typeDefs = gql`
     type Product {
         id: ID!
         name: String!
+        description: String!
         price: Float!
         stock: Int!
-        category: Category!
-        images: [String!]!
+        category: ID!
+        images: [String]
         vendor: User!
-        createdAt: String!
+    }
+
+    type PaginatedProducts {
+        products: [Product!]!
+        pagination: PaginationInfo!
+    }
+
+    type ProductResponse {
+        success: Boolean!
+        message: String!
+        product: Product
+    }
+
+    type DeleteProductResponse {
+        success: Boolean!
+        message: String!
     }
 
     type Query {
         paginatedUsers(page: Int, limit: Int): PaginatedUsers!
         user(id: ID!): UserResponse
+
         paginatedUserProfiles(page: Int, limit: Int): PaginatedUserProfiles!
         userProfile(id: ID!): UserProfileResponse
+
+        paginatedProducts(page: Int, limit: Int): PaginatedProducts!
+        product(id: ID!): ProductResponse
+
         categories: [Category!]!
         category(id: ID!): CategoryResponse
     }
@@ -134,6 +155,26 @@ const typeDefs = gql`
         UpdateUserProfile(
             input: UpdateUserProfileInput!
         ): UserProfileResponse!
+
+        CreateProduct(
+            name: String!
+            description: String!
+            price: Float!
+            stock: Int!
+            category: ID!
+            images: [String]
+        ): ProductResponse
+
+        UpdateProduct(
+            id: ID!
+            name: String
+            description: String
+            price: Float
+            stock: Int
+            category: ID
+        ): ProductResponse
+
+        DeleteProduct(id: ID!): DeleteProductResponse
     }
 `
 

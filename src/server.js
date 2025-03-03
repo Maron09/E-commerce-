@@ -8,6 +8,7 @@ import resolvers from "./graphql/resolvers.js"
 import AuthRoutes from "./routes/Auth-Routes.js"
 import AuthMiddleware from "./middleware/auth-middleware.js"
 import UserRoutes from "./routes/User-Routes.js"
+import ProductRoute from "./routes/Product-Routes.js"
 
 
 
@@ -26,7 +27,12 @@ async function startApolloServer() {
     try {   
         const server = new ApolloServer({
             typeDefs,
-            resolvers
+            resolvers,
+            context: ({req}) => ({req}),
+            formatError: (err) => {
+                console.error("Graphql Error: ", err)
+                return err
+            }
         })
         await server.start()
 
@@ -35,13 +41,14 @@ async function startApolloServer() {
         }))
         app.use("/api", AuthRoutes)
         app.use("/api", AuthMiddleware.VerifyToken, UserRoutes)
+        app.use("/api", AuthMiddleware.VerifyToken, AuthMiddleware.IsVendor, ProductRoute)
 
         app.listen(PORT, () => {
             console.log(`🚀 Server is running on http://localhost:${PORT}`);
             console.log(`📌 GraphQL is running on http://localhost:${PORT}/graphql`)
         })
     } catch(error) {
-        console.error("🚫 Failed to start Server", Error);
+        console.error("🚫 Failed to start Server", error);
     }
 }
 

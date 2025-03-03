@@ -1,8 +1,10 @@
 import paginationResults from "../helpers/pagination.js"
 import User from "../models/User.js"
 import Category from "../models/Category.js"
+import Product from "../models/Product.js"
 import mongoose from "mongoose"
 import userProfile from "../models/UserProfile.js"
+
 
 
 
@@ -190,6 +192,54 @@ const resolvers = {
                     success: false,
                     message: error.message,
                     userProfile: null
+                };
+            }
+        },
+        paginatedProducts: async (_, {page=1, limit=10}) => {
+            try {
+                const totalItems = await Product.countDocuments()
+                const { skip, ...pagination } = paginationResults(page, limit, totalItems)
+
+                const products = await Product.find().skip(skip).limit(limit).populate("vendor")
+
+                return {
+                    products,
+                    pagination
+                }
+            } catch(error) {
+                throw new Error("Error Fetching Products")
+            }
+        },
+        product: async (_, {id}) => {
+            try {
+                if (!mongoose.Types.ObjectId.isValid(id)) {
+                    return {
+                        success: false,
+                        message: "Invalid product ID",
+                        product: null
+                    }
+                }
+
+                const product = await Product.findById(id).populate("vendor")
+
+                if (!product) {
+                    return {
+                        success: false,
+                        message: "Product not found",
+                        product: null
+                    }
+                }
+
+                return {
+                    success: true,
+                    message: "Product retrieved successfully",
+                    product
+                }
+            } catch(error) {
+                return {
+                    success: false,
+                    message: "Error retrieving product",
+                    product: null
                 };
             }
         }
@@ -385,8 +435,127 @@ const resolvers = {
                     userProfile: null
                 };
             }
+        },
+        CreateProduct: async (_, { name, description, price, stock, category }, { req }) => {
+            try {
+                if (!req.userInfo || req.userInfo.role !== "VENDOR") {
+                    throw new Error ("Access Denied. Only Vendors Can Create Products")
+                }
+                
+                const newProduct = await Product.create({
+                    name,
+                    description,
+                    price,
+                    stock,
+                    category,
+                    vendor: req.userInfo.userID
+                });
+
+                const populatedProduct = await Product.findById(newProduct._id).populate(
+                    "vendor", "firstName lastName", "businessName"
+                );
+
+                return {
+                    success: true,
+                    message: "Product created successfully",
+                    product: populatedProduct
+                }
+            } catch(error) {
+                return {
+                    success: false,
+                    message: error.message,
+                    product: null
+                };
+            }
+        },
+        UpdateProduct: async (_, { id, name, description, price, stock, category }, { req }) => {
+            try {
+                if (!req.userInfo || req.userInfo.role !== "VENDOR") {
+                    throw new Error ("Access Denied. Only Vendors Can Create Products")
+                }
+
+                if (!mongoose.Types.ObjectId.isValid(id)) {
+                    return {
+                        success: false,
+                        message: "Invalid product ID",
+                        product: null
+                    };
+                }
+
+                const updatedProduct = await Product.findByIdAndUpdate(
+                    id,
+                    {name, description, price, stock, category},
+                    {new: true, runValidators: true}
+                ).populate("vendor")
+
+                if (!updatedProduct.vendor || req.userInfo.userID !== updatedProduct.vendor._id.toString()) {
+                    return {
+                        success: false,
+                        message: "Access Denied. You can only edit your own Product"
+                    }
+                }
+
+                if (!updatedProduct) {
+                    return {
+                        success: false,
+                        message: "Product Not Found",
+                        product: null
+                    }
+                }
+                return {
+                    success: true,
+                    message: "Product Updated Successfully",
+                    product: updatedProduct
+                }
+            } catch(error) {
+                return {
+                    success: false,
+                    message: error.message,
+                    product: null
+                };
+            }
+        },
+        DeleteProduct: async (_, {id}, {req}) => {
+            try {
+                if (!req.userInfo || req.userInfo.role !== "VENDOR") {
+                    throw new Error ("Access Denied. Vendors Only")
+                }
+
+                if (!mongoose.Types.ObjectId.isValid(id)) {
+                    return {
+                        success: false,
+                        message: "Invalid product ID",
+                        product: null
+                    };
+                }
+
+                const deleteProduct = await Product.findByIdAndDelete(id)
+
+                if (!deleteProduct.vendor || req.userInfo.userID !== deleteProduct.vendor._id.toString()) {
+                    return {
+                        success: false,
+                        message: "Access Denied. You can only delete your own Product"
+                    }
+                }
+                if (!deleteProduct) {
+                    return {
+                        success: false,
+                        message: "Product Not Found",
+                        product: null
+                    }
+                }
+
+                return {
+                    success: true,
+                    message: "Product deleted Successfully",
+                }
+            } catch(error) {
+                return {
+                    success: false,
+                    message: "Error deleting Product",
+                }
+            }
         }
-        
     }
 }
 

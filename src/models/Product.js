@@ -23,7 +23,7 @@ const ProductSchema = new Schema({
         type: Number,
         required: true
     },
-    catgory: {
+    category: {
         type: Schema.Types.ObjectId,
         ref: "Category",
         required: true
@@ -42,10 +42,6 @@ const ProductSchema = new Schema({
         ref: "User",
         required: true
     },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
 }, {timestamps: true})
 
 
