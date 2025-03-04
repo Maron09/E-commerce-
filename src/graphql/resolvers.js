@@ -568,66 +568,88 @@ const resolvers = {
                     throw new Error("Invalid product ID");
                 }
         
+                // ✅ Check if the item already exists in the wishlist
                 const existingItem = await WishList.findOne({
                     product: productId,
                     customer: customerId,
+                }).populate({
+                    path: "product",
+                    populate: { path: "vendor" },
                 });
         
                 if (existingItem) {
                     if (existingItem.isDeleted) {
-                    existingItem.isDeleted = false;
-                    await existingItem.save();
-                    return {
-                        success: true,
-                        message: "Wishlist item restored",
-                        item: {
-                        ...existingItem.toObject(),
-                        id: existingItem._id.toString(), // ✅ Convert `_id` to string
-                        product: {
-                            ...existingItem.product.toObject(),
-                            id: existingItem.product._id.toString(), // ✅ Convert product `_id` to string
-                        },
-                        },
-                    };
+                        existingItem.isDeleted = false;
+                        await existingItem.save();
+                    } else {
+                        return {
+                            success: false,
+                            message: "Item already in wishlist",
+                            item: null,
+                        };
                     }
-                    return {
-                    success: false,
-                    message: "Item already in wishlist",
-                    item: null,
-                    };
+                } else {
+                    // ✅ Create new wishlist item
+                    const newWishlistItem = await WishList.create({
+                        product: productId,
+                        customer: customerId,
+                    });
+        
+                    await newWishlistItem.populate({
+                        path: "product",
+                        populate: { path: "vendor" },
+                    });
                 }
         
-                const newWishlistItem = await WishList.create({
+                // ✅ Convert Mongoose Document to Object
+                const wishlistItem = await WishList.findOne({
                     product: productId,
                     customer: customerId,
-                });
+                })
+                    .populate({
+                        path: "product",
+                        populate: { path: "vendor" },
+                    })
+                    .populate("customer") // ✅ Ensure customer is populated
+                    .lean(); // Convert Mongoose document to plain JS object
         
-                // Fetch the newly created item and populate it
-                const populatedWishlistItem = await WishList.findById(newWishlistItem._id)
-                    .populate("product")
-                    .lean();
-        
+                // ✅ Ensure IDs are properly converted to strings
                 return {
                     success: true,
                     message: "Item added to wishlist",
                     item: {
-                    ...populatedWishlistItem,
-                    id: populatedWishlistItem._id.toString(), // ✅ Ensure `id` is a string
-                    product: {
-                        ...populatedWishlistItem.product,
-                        id: populatedWishlistItem.product._id.toString(), // ✅ Convert `product.id` to string
-                    },
+                        ...wishlistItem,
+                        id: wishlistItem._id.toString(),
+                        product: {
+                            ...wishlistItem.product,
+                            id: wishlistItem.product._id.toString(),
+                            vendor: {
+                                ...wishlistItem.product.vendor,
+                                id: wishlistItem.product.vendor._id.toString(),
+                            },
+                        },
+                        customer: {
+                            ...wishlistItem.customer,
+                            id: wishlistItem.customer._id.toString(),
+                            firstName: wishlistItem.customer.firstName || "", // ✅ Prevent null values
+                            lastName: wishlistItem.customer.lastName || "",
+                            email: wishlistItem.customer.email || "",
+                        },
                     },
                 };
-                } catch (error) {
+            } catch (error) {
                 console.error(error);
                 return {
                     success: false,
                     message: error.message,
                     item: null,
                 };
-                }
+            }
         },
+        
+        
+        
+        
         removeFromWishList: async (_, { productId }, { req }) => {
             try {
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
