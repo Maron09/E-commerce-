@@ -8,7 +8,7 @@ class ProductControllers {
             if (!req.cloudinaryUrls || req.cloudinaryUrls.length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "File uploads"
+                    message: "Upload at least One file"
                 })
             }
 

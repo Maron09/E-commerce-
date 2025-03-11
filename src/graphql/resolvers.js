@@ -5,6 +5,7 @@ import Product from "../models/Product.js"
 import mongoose from "mongoose"
 import userProfile from "../models/UserProfile.js"
 import WishList from "../models/Wishlist.js"
+import Cart from "../models/Cart.js"
 
 
 
@@ -240,6 +241,151 @@ const resolvers = {
                 return {
                     success: false,
                     message: "Error retrieving product",
+                    product: null
+                };
+            }
+        },
+        wishlists: async(_, __, {req}) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+
+                const customerId = req.userInfo.userID
+
+                const wishlists = await WishList.find({customer: customerId}).populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                }).populate("customer")
+
+                return wishlists.map(wishlist => ({
+                    ...wishlist.toObject(),
+                    id: wishlist._id.toString(),
+                    product: {
+                        ...wishlist.product.toObject(),
+                        id: wishlist.product._id.toString(),
+                        vendor: {
+                            ...wishlist.product.vendor.toObject(),
+                            id: wishlist.product.vendor._id.toString()
+                        }
+                    },
+                    customer: {
+                        ...wishlist.customer.toObject(),
+                        id: wishlist.customer._id.toString()
+                    }
+                }))
+            }catch(error) {
+                console.error(error);
+                throw new Error(error.message)
+            }
+        },
+        wishlist: async(_, {id}, {req}) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+                if (!mongoose.Types.ObjectId.isValid(id)) {
+                    throw new Error("Invalid Wishlist ID")
+                }
+                const customerId = req.userInfo.userID
+
+                const wishlist = await WishList.findOne({
+                    _id: id,
+                    customer: customerId
+                }).populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                }).populate("customer")
+
+                if (!wishlist) {
+                    return {
+                        success: false,
+                        message: "wishlist item not found",
+                        item: null
+                    }
+                }
+
+                return {
+                    success: true,
+                    message: "Wishlist item retrieve successfully",
+                    item: wishlist
+                }
+            }catch(error) {
+                return {
+                    success: false,
+                    message: "Error retrieving wishlist",
+                    product: null
+                };
+            }
+        },
+        cartItems: async (_, __, {req}) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+                const customerId = req.userInfo.userID
+
+                const cartItems = await Cart.find({customer: customerId}).populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                }).populate("customer")
+
+                return cartItems.map(cartItem => ({
+                    ...cartItem.toObject(),
+                    id: cartItem._id.toString(),
+                    product: {
+                        ...cartItem.product.toObject(),
+                        id: cartItem.product._id.toString(),
+                        vendor: {
+                            ...cartItem.product.vendor.toObject(),
+                            id: cartItem.product.vendor._id.toString()
+                        }
+                    },
+                    customer: {
+                        ...cartItem.customer.toObject(),
+                        id: cartItem.customer._id.toString()
+                    }
+                }))
+            }catch(error) {
+                console.error(error);
+                throw new Error(error.message);
+            }
+        },
+        cartItem: async (_, {id}, {req}) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+                if (!mongoose.Types.ObjectId.isValid(id)) {
+                    throw new Error("Invalid Wishlist ID")
+                }
+                const customerId = req.userInfo.userID
+
+                const cartItem = await Cart.findOne({
+                    _id: id,
+                    customer: customerId
+                }).populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                }).populate("customer")
+
+                if (!cartItem) {
+                    return {
+                        success: false,
+                        message: "Cart Item not found",
+                        item: null
+                    }
+                }
+
+                return {
+                    success: true,
+                    message: "Cart Item retrieved successfully",
+                    item: cartItem
+                }
+            }catch(error) {
+                return {
+                    success: false,
+                    message: "Error retrieving wishlist",
                     product: null
                 };
             }
@@ -646,10 +792,6 @@ const resolvers = {
                 };
             }
         },
-        
-        
-        
-        
         removeFromWishList: async (_, { productId }, { req }) => {
             try {
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
@@ -709,9 +851,158 @@ const resolvers = {
                     item: null
                 };
             }
+        },
+        addToCart: async(_, { productId, quantity }, {req}) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+                const customerId = req.userInfo.userID
+
+                if (!mongoose.Types.ObjectId.isValid(productId)) {
+                    throw new Error("Invalid Product ID")
+                }
+
+                const product = await Product.findById(productId)
+                if (!product) {
+                    return {
+                        success: false,
+                        message: "Product not Available",
+                        item: null
+                    }
+                }
+
+                let cartItem = await Cart.findOne({customer: customerId, product:productId})
+                if (cartItem) {
+                    const newQuantity = cartItem.quantity + quantity
+
+                    if (newQuantity > product.stock) {
+                        return {
+                            success: false,
+                            message: `Only ${product.stock} items are left in stock`,
+                            item: null
+                        }
+                    }
+                    cartItem.quantity = newQuantity
+                    await cartItem.save()
+                    
+                } else {
+                    if (quantity > product.stock) {
+                        return {
+                            success: false,
+                            message: `Only ${product.stock} items are left in stock.`,
+                            item: null
+                        }
+                    }
+                    cartItem = await Cart.create({
+                        customer: customerId,
+                        product:productId,
+                        quantity
+                    })
+                }
+
+                await cartItem.populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                })
+                await cartItem.populate("customer");
+
+                return {
+                    success: true,
+                    message: "Item added to cart",
+                    item: cartItem
+                }
+            }catch(error) {
+                console.error(error);
+                return {
+                    success: false,
+                    message: error.message,
+                    item: null
+                };
+            }
+        },
+        removeFromCart: async(_, { productId, quantity }, { req }) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+
+                const customerId = req.userInfo.userID
+
+                if (!mongoose.Types.ObjectId.isValid(productId)) {
+                    throw new Error("Invalid Product ID")
+                }
+
+                const cartItem = await Cart.findOne({customer: customerId, product:productId})
+
+                if (!cartItem) {
+                    return {
+                        success: false,
+                        message: "Item not found",
+                        item: null
+                    }
+                }
+
+                if (!quantity || cartItem.quantity <= quantity) {
+                    await cartItem.deleteOne()
+                    return {
+                        success: true,
+                        message: "Item removed from cart",
+                        item: null
+                    }
+                }
+
+                cartItem.quantity -= quantity
+                await cartItem.save()
+
+                await cartItem.populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                })
+                await cartItem.populate("customer")
+
+                return {
+                    success: true,
+                    message: "Item quantity updated",
+                    item: cartItem
+                }
+            }catch(error) {
+                console.error(error);
+                return {
+                    success: false,
+                    message: error.message,
+                    item: null
+                };
+            }
+        },
+        clearCart: async(_, __, {req}) => {
+            try{
+                if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
+                    throw new Error("Access Denied. Only Customers can Add to cart")
+                }
+
+                const customerId = req.userInfo.userID
+
+                await Cart.deleteMany({customer: customerId}).populate({
+                    path: "product",
+                    populate: {path: "vendor"}
+                }).populate("customer")
+
+                return {
+                    success: true,
+                    message: "Cart Cleared Successfully",
+                    item: null
+                }
+            }catch(error){
+                console.error(error);
+                return {
+                    success: false,
+                    message: error.message,
+                };
+            }
         }
     }
 }
 
 
-export default resolvers
+export default resolvers;

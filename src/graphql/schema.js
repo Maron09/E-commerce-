@@ -126,6 +126,7 @@ const typeDefs = gql`
     }
 
     type WishList {
+        id: ID!
         product: Product!
         customer: User!
         isDeleted: Boolean!
@@ -135,6 +136,20 @@ const typeDefs = gql`
         success: Boolean!
         message: String!
         item: WishList
+    }
+
+
+    type Cart {
+        id: ID!
+        customer: User!
+        product: Product!
+        quantity: Int
+    }
+
+    type CartResponse {
+        success: Boolean!
+        message: String!
+        item: Cart
     }
 
     type Query {
@@ -152,6 +167,9 @@ const typeDefs = gql`
 
         wishlists: [WishList!]!
         wishlist(id: ID!): WishListResponse
+
+        cartItems: [Cart!]!
+        cartItem(id: ID!): CartResponse
     }
 
     type Mutation {
@@ -193,6 +211,10 @@ const typeDefs = gql`
 
         addToWishList(productId: ID!): WishListResponse!
         removeFromWishList(productId: ID!): WishListResponse!
+
+        addToCart(productId: ID!, quantity: Int!): CartResponse!
+        removeFromCart(productId: ID!, quantity: Int): CartResponse!
+        clearCart: CartResponse!
     }
 `
 
