@@ -10,6 +10,7 @@ import AuthMiddleware from "./middleware/auth-middleware.js"
 import UserRoutes from "./routes/User-Routes.js"
 import ProductRoute from "./routes/Product-Routes.js"
 import OrderRoutes from "./routes/Order-Routes.js"
+import PaymentRoutes from "./routes/Payment-Routes.js"
 
 
 
@@ -44,6 +45,7 @@ async function startApolloServer() {
         app.use("/api", AuthMiddleware.VerifyToken, UserRoutes)
         app.use("/api",  ProductRoute)
         app.use("/api/orders", OrderRoutes);
+        app.use("/api/payment", PaymentRoutes)
 
 
         app.listen(PORT, () => {

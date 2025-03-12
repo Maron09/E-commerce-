@@ -2,8 +2,9 @@ import Cart from "../models/Cart.js";
 import Order from "../models/Order.js";
 import OrderItem from "../models/OrderItem.js";
 import mongoose from "mongoose";
+import Stripe from "stripe";
 
-
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
 class OrderController {
     static async placeOrder(req, res) {
@@ -78,6 +79,13 @@ class OrderController {
     
             // 🔥 Fetch the updated order with populated `items`
             const updatedOrder = await Order.findById(order[0]._id).populate("items").session(session);
+
+            const pamentIntent = await stripe.paymentIntents.create({
+                amount: Math.round(totalPrice *100),
+                currency: "ngn",
+                metadata: {orderId: order[0]._id.toString()},
+                payment_method_types: ["card"]
+            })
     
             await session.commitTransaction();
             session.endSession();
@@ -85,10 +93,11 @@ class OrderController {
             return res.status(201).json({
                 success: true,
                 message: "Order placed successfully",
-                order: updatedOrder, // ✅ Return the updated order
+                order: updatedOrder,
+                clientSecret: pamentIntent.client_secret
             });
         } catch (error) {
-            await session.abortTransaction();
+            await session.abortTransaction()
             session.endSession();
             return res.status(400).json({ success: false, message: error.message });
         }
