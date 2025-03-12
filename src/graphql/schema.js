@@ -152,6 +152,7 @@ const typeDefs = gql`
         item: Cart
     }
 
+
     type Query {
         paginatedUsers(page: Int, limit: Int): PaginatedUsers!
         user(id: ID!): UserResponse
@@ -215,6 +216,7 @@ const typeDefs = gql`
         addToCart(productId: ID!, quantity: Int!): CartResponse!
         removeFromCart(productId: ID!, quantity: Int): CartResponse!
         clearCart: CartResponse!
+
     }
 `
 

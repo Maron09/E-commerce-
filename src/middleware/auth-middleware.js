@@ -4,7 +4,9 @@ import "../helpers/env.js"
 
 class AuthMiddleware {
     static VerifyToken (req, res, next) {
+        console.log("VerifyToken: Checking Authorization Header...");
         const authHeader = req.headers["authorization"]
+        console.log("Auth Header:", authHeader);
 
         const token = authHeader && authHeader.split(" ")[1]
 
@@ -20,6 +22,7 @@ class AuthMiddleware {
                 token,
                 process.env.JWT_SECRET_KEY
             )
+            console.log("Decoded Token:", decodedToken);
 
             req.userInfo = decodedToken
 
@@ -53,13 +56,16 @@ class AuthMiddleware {
     }
 
     static IsCustomer (req, res, next) {
+        console.log("Inside IsCustomer Middleware. User role:", req.userInfo.role)
         if (req.userInfo?.role !== "CUSTOMER") {
+            console.log("Access Denied: Expected CUSTOMER, got", req.userInfo.role)
             return res.status(403).json({
                 success: false,
                 message: "Access Denied, Customers only"
             })
         }
-        next()
+        console.log("User is CUSTOMER. Proceeding...")
+        next();
     }
 }
 

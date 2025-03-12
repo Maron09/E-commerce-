@@ -6,6 +6,10 @@ import mongoose from "mongoose"
 import userProfile from "../models/UserProfile.js"
 import WishList from "../models/Wishlist.js"
 import Cart from "../models/Cart.js"
+import Order from "../models/Order.js"
+import OrderItem from "../models/OrderItem.js"
+
+
 
 
 
@@ -393,14 +397,21 @@ const resolvers = {
     },
     Mutation: {
         CreateCategory: async (_, {name}, {req}) => {
+            const session = await mongoose.startSession()
+
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo?.role !== "ADMIN") {
                     throw new Error("Access Denied. Admin only.")
                 }
 
-                const newCategory = await Category.create({
-                    name
-                })
+                const newCategory = await Category.create(
+                    [{name}],
+                    {session}
+                )
+
+                await session.commitTransaction()
+                session.endSession()
 
                 return {
                     success: true,
@@ -408,6 +419,9 @@ const resolvers = {
                     category: newCategory
                 }
             } catch(error) {
+                await session.abortTransaction()
+                session.endSession()
+                console.error("Transaction failed:", error);
                 return {
                     success: false,
                     message: "Failed to create category",
@@ -416,6 +430,8 @@ const resolvers = {
             }
         },
         DeleteCategory: async (_, {id}, {req}) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo?.role !== "ADMIN") {
                     throw new Error("Access Denied. Admin only.")
@@ -429,8 +445,10 @@ const resolvers = {
                     }
                 }
 
-                const deleteCategory = await Category.findByIdAndDelete(id)
+                const deleteCategory = await Category.findById(id).session(session)
                 if (!deleteCategory) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Category not found",
@@ -438,11 +456,20 @@ const resolvers = {
                     };
                 }
 
+                await Category.deleteOne(
+                    {_id:id},
+                    {session}
+                )
+                await session.commitTransaction()
+                session.endSession()
+
                 return {
                     success: true,
                     message: "Category deleted Successfully"
                 }
             } catch(error) {
+                await session.abortTransaction();
+                session.endSession();
                 return {
                     success: false,
                     message: "Error deleting category",
@@ -450,42 +477,58 @@ const resolvers = {
             }
         },
         UpdateCategory: async(_, {id, name}, {req}) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo?.role !== "ADMIN") {
                     throw new Error("Access Denied. Admin only.")
                 }
                 if (!mongoose.Types.ObjectId.isValid(id)) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "User not found",
                         user: null
                     }
                 }
-                const updatedCategory = await Category.findByIdAndUpdate(
-                    id,
-                    {name},
-                    {new:true, runValidators: true}
-                )
-                if (!updatedCategory) {
+                const category = await Category.findById(id).session(session)
+                if (!category) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Category not Found",
                         category: null
                     }
                 }
+                category.name = name
+                await category.save({session})
+
+                await session.commitTransaction()
+                session.endSession()
                 return {
                     success: true,
                     message: "Category Updated Successfully",
                     category: updatedCategory
                 }
             } catch(error) {
+                await session.abortTransaction();
+                session.endSession();
 
+                console.error("Transaction failed:", error);
+
+                return {
+                    success: false,
+                    message: "Error updating category",
+                    category: null
+                };
             }
         },
         UpdateUserProfile: async (_, { input }, { req }) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
-                // console.log("🔍 Received Input:", input);
-                // console.log("🔍 req.userInfo:", req.userInfo);
         
                 const { userId, phoneNumber, address, firstName, lastName, email } = input;
         
@@ -496,9 +539,6 @@ const resolvers = {
                 if (!req.userInfo.userID) {
                     throw new Error("Access Denied: No user ID found in session.");
                 }
-        
-                // console.log("🔍 userId received:", userId);
-                // console.log("🔍 req.userInfo.userID:", req.userInfo.userID);
         
                 if (!userId) {
                     throw new Error("Invalid request: userId is missing in input.");
@@ -521,15 +561,15 @@ const resolvers = {
                 const updatedProfile = await userProfile.findOneAndUpdate(
                     { user: userId },
                     updateData,
-                    { new: true, runValidators: true }
+                    { new: true, runValidators: true, session }
                 ).populate({
                     path: "user",
                     select: "firstName lastName email role businessName isVerified isActive"
                 });
         
-                // console.log("✅ Updated Profile:", updatedProfile);
-        
                 if (!updatedProfile) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Profile not found",
@@ -538,6 +578,8 @@ const resolvers = {
                 }
         
                 if (!updatedProfile.user) {
+                    await session.abortTransaction()
+                    session.endSession()
                     console.error("❌ Error: updatedProfile.user is null.");
                     throw new Error("User not found in profile.");
                 }
@@ -547,13 +589,18 @@ const resolvers = {
                     updateUser = await User.findByIdAndUpdate(
                         userId,
                         updateUserData,
-                        { new: true, runValidators: true }
+                        { new: true, runValidators: true, session }
                     );
                 }
         
                 if (!updateUser) {
+                    await session.abortTransaction()
+                    session.endSession()
                     throw new Error("User update failed.");
                 }
+
+                await session.commitTransaction()
+                session.endSession()
         
                 // Convert `_id` to string & remove `businessName` if not a vendor
                 const userObj = updateUser.toObject();
@@ -575,6 +622,8 @@ const resolvers = {
                     }
                 };
             } catch (error) {
+                await session.abortTransaction()
+                session.endSession()
                 console.error("🔥 Error in updateUserProfile:", error);
                 return {
                     success: false,
@@ -584,23 +633,38 @@ const resolvers = {
             }
         },
         CreateProduct: async (_, { name, description, price, stock, category }, { req }) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo.role !== "VENDOR") {
                     throw new Error ("Access Denied. Only Vendors Can Create Products")
                 }
                 
-                const newProduct = await Product.create({
+                const newProduct = await Product.create([{
                     name,
                     description,
                     price,
                     stock,
                     category,
                     vendor: req.userInfo.userID
-                });
+                }], {session});
 
-                const populatedProduct = await Product.findById(newProduct._id).populate(
+                const populatedProduct = await Product.findById(newProduct[0]._id).populate(
                     "vendor", "firstName lastName", "businessName"
-                );
+                ).session(session)
+
+                if (!populatedProduct) {
+                    await session.abortTransaction();
+                    session.endSession();
+                    return {
+                        success: false,
+                        message: "Failed to create product",
+                        product: null
+                    };
+                }
+
+                await session.commitTransaction()
+                session.endSession()
 
                 return {
                     success: true,
@@ -608,6 +672,8 @@ const resolvers = {
                     product: populatedProduct
                 }
             } catch(error) {
+                await session.abortTransaction();
+                session.endSession();
                 return {
                     success: false,
                     message: error.message,
@@ -616,6 +682,8 @@ const resolvers = {
             }
         },
         UpdateProduct: async (_, { id, name, description, price, stock, category }, { req }) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo.role !== "VENDOR") {
                     throw new Error ("Access Denied. Only Vendors Can Create Products")
@@ -629,32 +697,45 @@ const resolvers = {
                     };
                 }
 
-                const updatedProduct = await Product.findByIdAndUpdate(
-                    id,
-                    {name, description, price, stock, category},
-                    {new: true, runValidators: true}
-                ).populate("vendor")
+                const existingProduct = await Product.findById(id).populate("vendor").session(session)
 
-                if (!updatedProduct.vendor || req.userInfo.userID !== updatedProduct.vendor._id.toString()) {
-                    return {
-                        success: false,
-                        message: "Access Denied. You can only edit your own Product"
-                    }
-                }
-
-                if (!updatedProduct) {
+                if (!existingProduct) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Product Not Found",
                         product: null
                     }
                 }
+
+                if (!existingProduct.vendor || req.userInfo.userID !== existingProduct.vendor._id.toString()) {
+                    await session.abortTransaction()
+                    session.endSession()
+                    return {
+                        success: false,
+                        message: "Access Denied. You can only edit your own Product"
+                    }
+                }
+
+                const updatedProduct = await Product.findByIdAndUpdate(
+                    id,
+                    { name, description, price, stock, category },
+                    { new: true, runValidators: true, session }
+                ).populate("vendor")
+
+                await session.commitTransaction()
+                session.endSession()
+
+                
                 return {
                     success: true,
                     message: "Product Updated Successfully",
                     product: updatedProduct
                 }
             } catch(error) {
+                await session.abortTransaction();
+                session.endSession();
                 return {
                     success: false,
                     message: error.message,
@@ -663,6 +744,8 @@ const resolvers = {
             }
         },
         DeleteProduct: async (_, {id}, {req}) => {
+            const session = await mongoose.startSession();
+            session.startTransaction();
             try {
                 if (!req.userInfo || req.userInfo.role !== "VENDOR") {
                     throw new Error ("Access Denied. Vendors Only")
@@ -675,28 +758,38 @@ const resolvers = {
                         product: null
                     };
                 }
+                const product = await Product.findById(id).populate("vendor").session(session)
 
-                const deleteProduct = await Product.findByIdAndDelete(id)
+                if (!product) {
+                    await session.abortTransaction()
+                    session.endSession()
+                    return {
+                        success: false,
+                        message: "Product Not Found",
+                    }
+                }
 
-                if (!deleteProduct.vendor || req.userInfo.userID !== deleteProduct.vendor._id.toString()) {
+                if (!product.vendor || req.userInfo.userID !== product.vendor._id.toString()) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Access Denied. You can only delete your own Product"
                     }
                 }
-                if (!deleteProduct) {
-                    return {
-                        success: false,
-                        message: "Product Not Found",
-                        product: null
-                    }
-                }
+
+                await Product.findByIdAndDelete(id, {session})
+
+                await session.commitTransaction()
+                session.endSession()
 
                 return {
                     success: true,
                     message: "Product deleted Successfully",
                 }
             } catch(error) {
+                await session.abortTransaction();
+                session.endSession();
                 return {
                     success: false,
                     message: "Error deleting Product",
@@ -704,6 +797,8 @@ const resolvers = {
             }
         },
         addToWishList: async (_, { productId }, { req }) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
                     throw new Error("Access Denied. Only customers can save products");
@@ -721,13 +816,15 @@ const resolvers = {
                 }).populate({
                     path: "product",
                     populate: { path: "vendor" },
-                });
+                }).session(session)
         
                 if (existingItem) {
                     if (existingItem.isDeleted) {
                         existingItem.isDeleted = false;
-                        await existingItem.save();
+                        await existingItem.save({session});
                     } else {
+                        await session.abortTransaction()
+                        session.endSession()
                         return {
                             success: false,
                             message: "Item already in wishlist",
@@ -736,17 +833,20 @@ const resolvers = {
                     }
                 } else {
                     // ✅ Create new wishlist item
-                    const newWishlistItem = await WishList.create({
+                    const newWishlistItem = await WishList.create([{
                         product: productId,
                         customer: customerId,
-                    });
+                    }], { session });
         
                     await newWishlistItem.populate({
                         path: "product",
                         populate: { path: "vendor" },
                     });
                 }
-        
+                
+                await session.commitTransaction()
+                session.endSession()
+
                 // ✅ Convert Mongoose Document to Object
                 const wishlistItem = await WishList.findOne({
                     product: productId,
@@ -784,6 +884,8 @@ const resolvers = {
                     },
                 };
             } catch (error) {
+                await session.abortTransaction();
+                session.endSession();
                 console.error(error);
                 return {
                     success: false,
@@ -793,6 +895,8 @@ const resolvers = {
             }
         },
         removeFromWishList: async (_, { productId }, { req }) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try {
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
                     throw new Error("Access Denied. Only customers can remove products");
@@ -809,10 +913,12 @@ const resolvers = {
                     customer: customerId
                 }).populate({
                     path: "product",
-                    populate: { path: "vendor" } // ✅ Ensure vendor is populated
-                }).populate("customer"); // ✅ Ensure customer is populated
+                    populate: { path: "vendor" } 
+                }).populate("customer").session(session)
             
                 if (!wishlistItem) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                     success: false,
                     message: "Item not found in wishlist",
@@ -822,6 +928,9 @@ const resolvers = {
             
                 wishlistItem.isDeleted = true;
                 await wishlistItem.save();
+
+                await session.commitTransaction()
+                session.endSession()
             
                 return {
                     success: true,
@@ -844,6 +953,8 @@ const resolvers = {
                     }
                 };
                 } catch (error) {
+                    await session.abortTransaction()
+                    session.endSession()
                 console.error(error);
                 return {
                     success: false,
@@ -853,6 +964,8 @@ const resolvers = {
             }
         },
         addToCart: async(_, { productId, quantity }, {req}) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try{
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
                     throw new Error("Access Denied. Only Customers can Add to cart")
@@ -863,8 +976,10 @@ const resolvers = {
                     throw new Error("Invalid Product ID")
                 }
 
-                const product = await Product.findById(productId)
+                const product = await Product.findById(productId).session(session)
                 if (!product) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Product not Available",
@@ -872,7 +987,7 @@ const resolvers = {
                     }
                 }
 
-                let cartItem = await Cart.findOne({customer: customerId, product:productId})
+                let cartItem = await Cart.findOne({customer: customerId, product:productId}).session(session)
                 if (cartItem) {
                     const newQuantity = cartItem.quantity + quantity
 
@@ -884,7 +999,7 @@ const resolvers = {
                         }
                     }
                     cartItem.quantity = newQuantity
-                    await cartItem.save()
+                    await cartItem.save({session})
                     
                 } else {
                     if (quantity > product.stock) {
@@ -894,11 +1009,11 @@ const resolvers = {
                             item: null
                         }
                     }
-                    cartItem = await Cart.create({
+                    cartItem = await Cart.create([{
                         customer: customerId,
                         product:productId,
                         quantity
-                    })
+                    }], {session})
                 }
 
                 await cartItem.populate({
@@ -907,12 +1022,17 @@ const resolvers = {
                 })
                 await cartItem.populate("customer");
 
+                await session.commitTransaction()
+                session.endSession()
+
                 return {
                     success: true,
                     message: "Item added to cart",
                     item: cartItem
                 }
             }catch(error) {
+                await session.abortTransaction()
+                session.endSession()
                 console.error(error);
                 return {
                     success: false,
@@ -922,6 +1042,8 @@ const resolvers = {
             }
         },
         removeFromCart: async(_, { productId, quantity }, { req }) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try{
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
                     throw new Error("Access Denied. Only Customers can Add to cart")
@@ -933,9 +1055,11 @@ const resolvers = {
                     throw new Error("Invalid Product ID")
                 }
 
-                const cartItem = await Cart.findOne({customer: customerId, product:productId})
+                const cartItem = await Cart.findOne({customer: customerId, product:productId}).session(session)
 
                 if (!cartItem) {
+                    await session.abortTransaction()
+                    session.endSession()
                     return {
                         success: false,
                         message: "Item not found",
@@ -944,7 +1068,7 @@ const resolvers = {
                 }
 
                 if (!quantity || cartItem.quantity <= quantity) {
-                    await cartItem.deleteOne()
+                    await cartItem.deleteOne({session})
                     return {
                         success: true,
                         message: "Item removed from cart",
@@ -953,7 +1077,7 @@ const resolvers = {
                 }
 
                 cartItem.quantity -= quantity
-                await cartItem.save()
+                await cartItem.save({session})
 
                 await cartItem.populate({
                     path: "product",
@@ -961,12 +1085,17 @@ const resolvers = {
                 })
                 await cartItem.populate("customer")
 
+                await session.commitTransaction()
+                session.endSession()
+
                 return {
                     success: true,
                     message: "Item quantity updated",
                     item: cartItem
                 }
             }catch(error) {
+                await session.abortTransaction()
+                session.endSession()
                 console.error(error);
                 return {
                     success: false,
@@ -976,6 +1105,8 @@ const resolvers = {
             }
         },
         clearCart: async(_, __, {req}) => {
+            const session = await mongoose.startSession()
+            session.startTransaction()
             try{
                 if (!req.userInfo || req.userInfo.role !== "CUSTOMER") {
                     throw new Error("Access Denied. Only Customers can Add to cart")
@@ -986,7 +1117,10 @@ const resolvers = {
                 await Cart.deleteMany({customer: customerId}).populate({
                     path: "product",
                     populate: {path: "vendor"}
-                }).populate("customer")
+                }).populate("customer").session(session)
+
+                await session.commitTransaction()
+                session.endSession()
 
                 return {
                     success: true,
@@ -994,13 +1128,15 @@ const resolvers = {
                     item: null
                 }
             }catch(error){
+                await session.abortTransaction()
+                session.endSession()
                 console.error(error);
                 return {
                     success: false,
                     message: error.message,
                 };
             }
-        }
+        },
     }
 }
 
